@@ -28,6 +28,13 @@ export class StepsRecord {
 
   @Prop({ type: StepInfo })
   provisioning?: StepInfo;
+
+  @Prop({ type: Object })
+  billingCompensation?: {
+    status: string;
+    at: Date;
+    reason?: string;
+  };
 }
 
 @Schema({ timestamps: true, collection: 'activations' })

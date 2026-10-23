@@ -23,6 +23,11 @@ export class ActivationController {
     };
   }
 
+  @Get()
+  async findAll() {
+    return this.activationService.findAll();
+  }
+
   @Get(':id')
   async findById(@Param('id') id: string) {
     return this.activationService.findById(id);

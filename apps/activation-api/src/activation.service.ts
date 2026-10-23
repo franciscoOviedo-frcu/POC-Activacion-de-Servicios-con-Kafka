@@ -13,6 +13,7 @@ import {
 } from '@app/contracts';
 import { Activation, ActivationDocument } from './activation.schema';
 import { CreateActivationDto } from './dto/create-activation.dto';
+import { ActivationGateway } from './activation.gateway';
 
 @Injectable()
 export class ActivationService {
@@ -23,6 +24,7 @@ export class ActivationService {
     private readonly activationModel: Model<ActivationDocument>,
     @Inject('KAFKA_PRODUCER')
     private readonly kafkaClient: ClientKafka,
+    private readonly gateway: ActivationGateway,
   ) {}
 
   async create(dto: CreateActivationDto): Promise<Activation> {
@@ -70,7 +72,15 @@ export class ActivationService {
     });
 
     this.logger.log(`Published ${EVENT_TYPES.ACTIVATION_REQUESTED} for correlationId: ${activationId}`);
+    
+    // Broadcast creation over WebSocket
+    this.gateway.notifyActivationUpdate(saved, envelope);
+
     return saved;
+  }
+
+  async findAll(limit = 20): Promise<Activation[]> {
+    return this.activationModel.find().sort({ createdAt: -1 }).limit(limit).exec();
   }
 
   async findById(activationId: string): Promise<Activation> {
@@ -91,12 +101,32 @@ export class ActivationService {
       return;
     }
 
-    const isSuccess = event.eventType === EVENT_TYPES.BILLING_ACCOUNT_CREATED;
-    const stepStatus = isSuccess ? 'OK' : 'FAILED';
-
     if (!activation.steps) {
       activation.steps = {};
     }
+
+    // Handle compensation event (BillingAccountCancelled)
+    if (event.eventType === EVENT_TYPES.BILLING_ACCOUNT_CANCELLED) {
+      activation.steps.billingCompensation = {
+        status: 'CANCELLED',
+        at: new Date(),
+        reason: event.payload?.reason,
+      };
+
+      activation.history.push({
+        eventType: event.eventType,
+        at: new Date(),
+      });
+
+      const updated = await activation.save();
+      this.gateway.notifyActivationUpdate(updated, event);
+      this.logger.warn(`Registered ${EVENT_TYPES.BILLING_ACCOUNT_CANCELLED} compensation for ${activationId}`);
+      return;
+    }
+
+    const isSuccess = event.eventType === EVENT_TYPES.BILLING_ACCOUNT_CREATED;
+    const stepStatus = isSuccess ? 'OK' : 'FAILED';
+
     activation.steps.billing = {
       status: stepStatus,
       at: new Date(),
@@ -111,7 +141,7 @@ export class ActivationService {
       activation.status = 'IN_PROGRESS';
     }
 
-    await this.evaluateSaga(activation);
+    await this.evaluateSaga(activation, event);
   }
 
   async handleProvisioningResult(event: EventEnvelope): Promise<void> {
@@ -144,15 +174,16 @@ export class ActivationService {
       activation.status = 'IN_PROGRESS';
     }
 
-    await this.evaluateSaga(activation);
+    await this.evaluateSaga(activation, event);
   }
 
-  private async evaluateSaga(activation: ActivationDocument): Promise<void> {
+  private async evaluateSaga(activation: ActivationDocument, triggeringEvent: EventEnvelope): Promise<void> {
     const { billing, provisioning } = activation.steps || {};
 
     // If already finalized (ACTIVE or FAILED), do not re-evaluate or emit duplicate terminal events
     if (activation.status === 'ACTIVE' || activation.status === 'FAILED') {
-      await activation.save();
+      const saved = await activation.save();
+      this.gateway.notifyActivationUpdate(saved, triggeringEvent);
       return;
     }
 
@@ -166,7 +197,7 @@ export class ActivationService {
         at: new Date(),
       });
 
-      await activation.save();
+      const saved = await activation.save();
       this.logger.warn(`Activation ${activation._id} transitioned to FAILED. Step failed: ${failedStep}`);
 
       const failureEnvelope: EventEnvelope<ActivationFailedPayload> = {
@@ -188,6 +219,7 @@ export class ActivationService {
         value: failureEnvelope,
       });
 
+      this.gateway.notifyActivationUpdate(saved, failureEnvelope);
       return;
     }
 
@@ -200,7 +232,7 @@ export class ActivationService {
         at: new Date(),
       });
 
-      await activation.save();
+      const saved = await activation.save();
       this.logger.log(`Activation ${activation._id} transitioned to ACTIVE.`);
 
       const successEnvelope: EventEnvelope<ActivationCompletedPayload> = {
@@ -222,10 +254,12 @@ export class ActivationService {
         value: successEnvelope,
       });
 
+      this.gateway.notifyActivationUpdate(saved, successEnvelope);
       return;
     }
 
     // Still awaiting other step
-    await activation.save();
+    const saved = await activation.save();
+    this.gateway.notifyActivationUpdate(saved, triggeringEvent);
   }
 }

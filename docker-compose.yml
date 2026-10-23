@@ -72,6 +72,7 @@ services:
       context: .
       dockerfile: apps/activation-api/Dockerfile
     container_name: activation-api
+    restart: on-failure
     ports:
       - "3000:3000"
     environment:
@@ -81,6 +82,8 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       mongo:
         condition: service_healthy
 
@@ -89,12 +92,15 @@ services:
       context: .
       dockerfile: apps/billing-service/Dockerfile
     container_name: billing-service
+    restart: on-failure
     environment:
       KAFKA_BROKERS: kafka:9092
       MONGO_URI: mongodb://mongo:27017/billing_db?replicaSet=rs0&directConnection=true
     depends_on:
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       mongo:
         condition: service_healthy
 
@@ -103,11 +109,48 @@ services:
       context: .
       dockerfile: apps/provisioning-service/Dockerfile
     container_name: provisioning-service
+    restart: on-failure
     environment:
       KAFKA_BROKERS: kafka:9092
       MONGO_URI: mongodb://mongo:27017/provisioning_db?replicaSet=rs0&directConnection=true
     depends_on:
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       mongo:
         condition: service_healthy
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: apps/notification-service/Dockerfile
+    container_name: notification-service
+    restart: on-failure
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      MONGO_URI: mongodb://mongo:27017/notification_db?replicaSet=rs0&directConnection=true
+      MAILHOG_HOST: mailhog
+      MAILHOG_PORT: 1025
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      mongo:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+
+  demo-ui:
+    build:
+      context: .
+      dockerfile: apps/demo-ui/Dockerfile
+    container_name: demo-ui
+    restart: on-failure
+    ports:
+      - "5173:5173"
+    depends_on:
+      - activation-api
+
+

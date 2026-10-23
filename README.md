@@ -60,6 +60,7 @@ docker compose up -d
 ### 3. Servicios Expuestos
 | Servicio | Interfaz | URL / Puerto |
 | :--- | :--- | :--- |
+| **Demo UI (React + Vite)** | Frontend reactivo en vivo | [http://localhost:5173](http://localhost:5173) |
 | **activation-api** | REST API & WebSocket | [http://localhost:3000](http://localhost:3000) |
 | **Kafka UI (Kafbat)** | Monitoreo de topics, offsets y lag | [http://localhost:8080](http://localhost:8080) |
 | **Mailhog** | Bandeja de entrada simulada | [http://localhost:8025](http://localhost:8025) |
@@ -73,11 +74,14 @@ docker compose up -d
 Ejecutar las pruebas de verificación de la saga distribuidas:
 
 ```bash
-# 1. Probar Camino Feliz (Ambos servicios confirman OK -> Estado ACTIVE)
+# 1. Probar Camino Feliz (Fase 1: Ambos servicios confirman OK -> Estado ACTIVE)
 node scripts/test-phase1.js
 
 # 2. Probar Fallo Forzado y Compensación (Fallo en prov -> Cancelación en billing -> Estado FAILED)
 node scripts/test-failure.js
+
+# 3. Probar Flujo Completo Fase 2 (Saga + Entrega de Mails en Mailhog + Compensación)
+node scripts/test-phase2.js
 ```
 
 ---

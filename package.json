@@ -4,13 +4,15 @@
   "description": "POC Activación de Servicios con Kafka - UTN FRCU Sistemas Distribuidos",
   "private": true,
   "scripts": {
-    "build": "nest build activation-api && nest build billing-service && nest build provisioning-service",
+    "build": "nest build activation-api && nest build billing-service && nest build provisioning-service && nest build notification-service",
     "build:all": "nest build activation-api && nest build billing-service && nest build provisioning-service && nest build notification-service && nest build crm-analytics-service",
+    "build:ui": "npm --prefix apps/demo-ui run build",
     "start:api": "nest start activation-api --watch",
     "start:billing": "nest start billing-service --watch",
     "start:provisioning": "nest start provisioning-service --watch",
     "start:notification": "nest start notification-service --watch",
-    "start:crm": "nest start crm-analytics-service --watch"
+    "start:crm": "nest start crm-analytics-service --watch",
+    "start:ui": "npm --prefix apps/demo-ui run dev"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.8",
@@ -21,10 +23,12 @@
     "@nestjs/platform-express": "^10.3.8",
     "@nestjs/platform-socket.io": "^10.3.8",
     "@nestjs/websockets": "^10.3.8",
+    "@types/nodemailer": "^8.0.2",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "kafkajs": "^2.2.4",
     "mongoose": "^8.3.4",
+    "nodemailer": "^10.2.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "socket.io": "^4.7.5",
